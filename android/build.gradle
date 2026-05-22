@@ -9,7 +9,7 @@ android {
 	}
 
 	defaultConfig {
-		applicationId "org.vita3k.emulator"
+		applicationId "org.vita3k.exynos"
 		minSdk 24
 		targetSdk 34
 		versionCode 12

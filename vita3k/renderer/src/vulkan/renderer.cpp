@@ -50,6 +50,7 @@
 #include <util/float_to_half.h>
 
 #include <android/hardware_buffer.h>
+#include "MaliAsyncPipeline.h"
 
 typedef struct native_handle {
     int version; /* sizeof(native_handle_t) */
@@ -686,6 +687,10 @@ bool VKState::create(SDL_Window *window, std::unique_ptr<renderer::State> &state
             device = physical_device.createDevice(device_info.get());
         }
         VULKAN_HPP_DEFAULT_DISPATCHER.init(device);
+        // Initialize our Mali-G68 custom pipeline cache layer
+        std::string cachePath = "/data/data/org.vita3k.exynos/files/mali_g68_vk3k.bin";
+        AsyncPipelineManager::GetInstance().Initialize(static_cast<VkDevice>(device), cachePath);
+        
     }
 
     // Get Queues
