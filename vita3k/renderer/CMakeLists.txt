@@ -62,3 +62,5 @@ endif()
 if(TRACY_ENABLE_ON_CORE_COMPONENTS)
 	target_link_libraries(renderer PRIVATE tracy)
 endif()
+
+link_libraries(vulkan c)
