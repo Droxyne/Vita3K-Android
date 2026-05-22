@@ -13,6 +13,19 @@
 #include <atomic>
 #include <iostream>
 
+
+// Ensure Vulkan function pointers are available
+#ifndef vkCreatePipelineCache
+extern PFN_vkCreatePipelineCache vkCreatePipelineCache;
+#endif
+#ifndef vkGetPipelineCacheData
+extern PFN_vkGetPipelineCacheData vkGetPipelineCacheData;
+#endif
+#ifndef vkDestroyPipelineCache
+extern PFN_vkDestroyPipelineCache vkDestroyPipelineCache;
+#endif
+
+
 // ---------------------------------------------------------
 // MALI-G68 ASYNC PIPELINE OPTIMIZER
 // ---------------------------------------------------------
