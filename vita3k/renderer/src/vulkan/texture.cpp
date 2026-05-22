@@ -391,7 +391,7 @@ void VKTextureCache::configure_texture(const SceGxmTexture &gxm_texture) {
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 // --- MALI TBDR TRANSIENT TRAP START ---
-if (MaliTBDROptimizer::IsDepthStencilFormat(image_info.format)) {
+if (MaliTBDROptimizer::IsDepthStencilFormat(static_cast<VkFormat>(image_info.format))) {
     // Force the driver to keep this depth buffer in the fast on-chip SRAM
         image_info.usage &= ~vk::ImageUsageFlagBits::eSampled;
             image_info.usage &= ~vk::ImageUsageFlagBits::eTransferSrc;
