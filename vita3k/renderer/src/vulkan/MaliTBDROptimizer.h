@@ -4,6 +4,24 @@
 #include <vector>
 #include <stdexcept>
 
+// Ensure Vulkan function pointers are available
+#ifndef vkGetPhysicalDeviceMemoryProperties
+extern PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties;
+#endif
+#ifndef vkCreateImage
+extern PFN_vkCreateImage vkCreateImage;
+#endif
+#ifndef vkGetImageMemoryRequirements
+extern PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements;
+#endif
+#ifndef vkAllocateMemory
+extern PFN_vkAllocateMemory vkAllocateMemory;
+#endif
+#ifndef vkBindImageMemory
+extern PFN_vkBindImageMemory vkBindImageMemory;
+#endif
+
+
 class MaliTBDROptimizer {
 public:
     static bool IsDepthStencilFormat(VkFormat format) {
