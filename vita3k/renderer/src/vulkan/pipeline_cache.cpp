@@ -36,6 +36,7 @@
 // with a known size
 #define XXH_INLINE_ALL
 #include <xxhash.h>
+#undef VK_NO_PROTOTYPES
 #include "MaliTBDROptimizer.h"
 
 namespace renderer::vulkan {
@@ -601,7 +602,7 @@ vk::RenderPass PipelineCache::retrieve_render_pass(vk::Format format, bool force
 // --- MALI BANDWIDTH SAVER START ---
 // Force DONT_CARE store ops so the Exynos SRAM never flushes depth data to main RAM.
 for (auto& att : attachments) { 
-    if (MaliTBDROptimizer::IsDepthStencilFormat(static_cast<VkFormat>(att.format))) {
+    if (MaliTBDROptimizer::IsDepthStencilFormat(static_cast<VkFormat>(att.format)) && !force_store) {
             att.storeOp = vk::AttachmentStoreOp::eDontCare;
                     att.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
                         }
