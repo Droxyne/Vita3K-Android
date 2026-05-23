@@ -49,10 +49,6 @@ public:
         // Lock the I/O mutex BEFORE destroying the cache
         std::lock_guard<std::mutex> lock(cacheIOMutex_);
 
-        if (pipelineCache_ != VK_NULL_HANDLE) {
-            vkDestroyPipelineCache(device_, pipelineCache_, nullptr);
-            pipelineCache_ = VK_NULL_HANDLE;
-        }
     }
 
     VkPipelineCache GetCacheHandle() const {
