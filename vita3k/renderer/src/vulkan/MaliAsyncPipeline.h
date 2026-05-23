@@ -27,6 +27,7 @@ public:
     }
 
     void Initialize(VkDevice device, const std::string& cacheFilePath) {
+        if (!shutdown_.load()) return;
         device_ = device;
         cacheFilePath_ = cacheFilePath;
         shutdown_.store(false);
