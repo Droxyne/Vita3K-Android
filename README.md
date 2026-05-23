@@ -21,7 +21,7 @@ Build instruction for the Android version are specified in [`building.md`](./bui
 
 ## Compatibility
 
-The emulator currently runs most homebrew programs. It is also able to load some commercial games.
+The emulator currently runs most homebrew programs. It is also able to load some commercial games
 
 - [Homebrew compatibility page](https://vita3k.org/compatibility-homebrew.html)
 - [Commercial compatibility page](https://vita3k.org/compatibility.html)
