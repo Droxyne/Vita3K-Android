@@ -519,12 +519,6 @@ vk::RenderPass PipelineCache::retrieve_render_pass(vk::Format format, bool force
         subpass.setColorAttachments(color_ref);
         subpass.setInputAttachments(color_ref);
     }
-
-    
-#ifdef ANDROID
-if (!force_load)
-    load_op = vk::AttachmentLoadOp::eDontCare;
-#endif
     
     vk::AttachmentDescription color_attachment{
         .format = format,
@@ -537,6 +531,12 @@ if (!force_load)
 
     vk::AttachmentLoadOp load_op = force_load ? vk::AttachmentLoadOp::eLoad : vk::AttachmentLoadOp::eClear;
     vk::AttachmentStoreOp store_op = force_store ? vk::AttachmentStoreOp::eStore : vk::AttachmentStoreOp::eDontCare;
+    
+#ifdef ANDROID
+if (!force_load)
+    load_op = vk::AttachmentLoadOp::eDontCare;
+#endif
+    
     vk::AttachmentDescription ds_attachment{
         .format = vk::Format::eD32SfloatS8Uint,
         .samples = vk::SampleCountFlagBits::e1,
