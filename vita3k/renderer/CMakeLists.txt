@@ -63,4 +63,8 @@ if(TRACY_ENABLE_ON_CORE_COMPONENTS)
 	target_link_libraries(renderer PRIVATE tracy)
 endif()
 
-link_libraries(vulkan c)
+# Tell the NDK to find the system Vulkan library
+find_library(vulkan-lib vulkan)
+
+# Link it properly to the renderer
+target_link_libraries(renderer PRIVATE ${vulkan-lib} c)
