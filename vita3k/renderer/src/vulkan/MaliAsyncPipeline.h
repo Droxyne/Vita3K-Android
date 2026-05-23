@@ -1,5 +1,5 @@
 #pragma once
-#undef VK_NO_PROTOTYPES
+
 #include <vulkan/vulkan.h>
 #include <thread>
 #include <mutex>
@@ -27,12 +27,11 @@ public:
     }
 
     void Initialize(VkDevice device, const std::string& cacheFilePath) {
-        if (!shutdown_.load()) return;
         device_ = device;
         cacheFilePath_ = cacheFilePath;
         shutdown_.store(false);
 
-        LoadCache();
+        LoadCache();  // stub, does nothing
 
         // Spawn background worker
         workerThread_ = std::thread(&AsyncPipelineManager::WorkerLoop, this);
@@ -87,24 +86,7 @@ public:
     }
 
     void SaveCache() {
-        std::lock_guard<std::mutex> lock(cacheIOMutex_);
-        if (pipelineCache_ == VK_NULL_HANDLE) return;
-
-        size_t size = 0;
-        if (vkGetPipelineCacheData(device_, pipelineCache_, &size, nullptr) != VK_SUCCESS || size == 0) {
-            return;
-        }
-
-        std::vector<char> buffer(size);
-        if (vkGetPipelineCacheData(device_, pipelineCache_, &size, buffer.data()) == VK_SUCCESS) {
-            std::string tempPath = cacheFilePath_ + ".tmp";
-            std::ofstream file(tempPath, std::ios::binary);
-            if (file.is_open()) {
-                file.write(buffer.data(), size);
-                file.close();
-                std::rename(tempPath.c_str(), cacheFilePath_.c_str());
-            }
-        }
+        // stub - pipeline cache persistence handled by Vita3K core
     }
 
 private:
@@ -134,28 +116,8 @@ private:
     uint32_t pipelinesCompiledSinceLastSave_ = 0;
 
     void LoadCache() {
-        std::lock_guard<std::mutex> lock(cacheIOMutex_);
-        VkPipelineCacheCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-
-        std::ifstream file(cacheFilePath_, std::ios::binary | std::ios::ate);
-        if (file.is_open()) {
-            size_t size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            std::vector<char> buffer(size);
-            file.read(buffer.data(), size);
-
-            info.initialDataSize = size;
-            info.pInitialData = buffer.data();
-
-            if (vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_) != VK_SUCCESS) {
-                info.initialDataSize = 0;
-                info.pInitialData = nullptr;
-                vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_);
-            }
-        } else {
-            vkCreatePipelineCache(device_, &info, nullptr, &pipelineCache_);
-        }
+        // stub - pipeline cache persistence handled by Vita3K core
+        pipelineCache_ = VK_NULL_HANDLE;
     }
 
     void WorkerLoop() {
