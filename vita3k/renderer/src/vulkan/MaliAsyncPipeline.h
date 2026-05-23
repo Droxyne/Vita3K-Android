@@ -1,6 +1,7 @@
 #pragma once
 
-#include <volk.h>
+#undef VK_NO_PROTOTYPES
+#include <vulkan/vulkan.h>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
