@@ -17,17 +17,17 @@
 #undef VK_NO_PROTOTYPES
 
 #include <renderer/vulkan/functions.h>
-
 #include <renderer/vulkan/gxm_to_vulkan.h>
-
 #include <vulkan/vulkan_format_traits.hpp>
-
 #include <gxm/functions.h>
 #include <gxm/types.h>
 #include <renderer/functions.h>
 #include <util/align.h>
 #include <vkutil/vkutil.h>
 #include "MaliTBDROptimizer.h"
+
+#include <fstream>   // for getrandom
+#include <sys/types.h>
 
 namespace renderer::vulkan {
 
@@ -391,20 +391,15 @@ void VKTextureCache::configure_texture(const SceGxmTexture &gxm_texture) {
         .sharingMode = vk::SharingMode::eExclusive,
         .initialLayout = vk::ImageLayout::eUndefined,
     };
-// --- MALI TBDR TRANSIENT TRAP START ---
-if (MaliTBDROptimizer::IsDepthStencilFormat(static_cast<VkFormat>(image_info.format))) {
-    // Force the driver to keep this depth buffer in the fast on-chip SRAM
+    // --- MALI TBDR TRANSIENT TRAP START ---
+    if (MaliTBDROptimizer::IsDepthStencilFormat(static_cast<VkFormat>(image_info.format))) {
+        // Force the driver to keep this depth buffer in the fast on-chip SRAM
         image_info.usage &= ~vk::ImageUsageFlagBits::eSampled;
-            image_info.usage &= ~vk::ImageUsageFlagBits::eTransferSrc;
-                image_info.usage &= ~vk::ImageUsageFlagBits::eTransferDst;
-                    image_info.usage |= vk::ImageUsageFlagBits::eTransientAttachment;
-                    }
-                    // --- MALI TBDR TRANSIENT TRAP END ---
-                    
-
-
-
-
+        image_info.usage &= ~vk::ImageUsageFlagBits::eTransferSrc;
+        image_info.usage &= ~vk::ImageUsageFlagBits::eTransferDst;
+        image_info.usage |= vk::ImageUsageFlagBits::eTransientAttachment;
+    }
+    // --- MALI TBDR TRANSIENT TRAP END ---
 
     std::tie(image.image, image.allocation) = state.allocator.createImage(image_info, vkutil::vma_auto_alloc);
 
@@ -675,6 +670,15 @@ void VKTextureCache::import_configure_impl(SceGxmTextureBaseFormat base_format, 
 
 } // namespace renderer::vulkan
 
-extern "C" long getrandom(void *buf, unsigned long buflen, unsigned int flags) {
-    return (long)buflen;
+// ----------------------------------------------------------------------
+// REAL getrandom implementation reading from /dev/urandom
+// ----------------------------------------------------------------------
+extern "C" ssize_t getrandom(void *buf, size_t buflen, unsigned int flags) {
+    std::ifstream urandom("/dev/urandom", std::ios::binary);
+    if (urandom.is_open()) {
+        urandom.read(reinterpret_cast<char*>(buf), buflen);
+        return static_cast<ssize_t>(buflen);
+    }
+    // If we can't get randomness, the emulator has bigger problems
+    return -1;
 }
