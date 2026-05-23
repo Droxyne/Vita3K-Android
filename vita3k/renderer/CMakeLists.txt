@@ -63,11 +63,10 @@ if(TRACY_ENABLE_ON_CORE_COMPONENTS)
 	target_link_libraries(renderer PRIVATE tracy)
 endif()
 
-# Link it properly to the renderer
-target_link_libraries(renderer PRIVATE ${vulkan-lib} c)
-
 if(ANDROID)
     set(vulkan-lib "vulkan")
 else()
     find_library(vulkan-lib vulkan)
 endif()
+
+target_link_libraries(renderer PRIVATE ${vulkan-lib} c)
