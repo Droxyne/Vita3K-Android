@@ -1,9 +1,16 @@
 #pragma once
 
-#undef VK_NO_PROTOTYPES
-#include <vulkan/vulkan.h>
 #include <vector>
 #include <stdexcept>
+
+// Force-feed Vulkan prototypes directly to the compiler
+extern "C" {
+    VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties(VkPhysicalDevice, VkPhysicalDeviceMemoryProperties*);
+    VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(VkDevice, const VkImageCreateInfo*, const VkAllocationCallbacks*, VkImage*);
+    VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements(VkDevice, VkImage, VkMemoryRequirements*);
+    VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(VkDevice, const VkMemoryAllocateInfo*, const VkAllocationCallbacks*, VkDeviceMemory*);
+    VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory(VkDevice, VkImage, VkDeviceMemory, VkDeviceSize);
+}
 
 
 class MaliTBDROptimizer {
