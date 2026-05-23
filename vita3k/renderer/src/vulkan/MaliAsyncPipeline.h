@@ -13,13 +13,6 @@
 #include <iostream>
 
 
-// Force-feed Vulkan prototypes directly to the compiler
-extern "C" {
-    VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineCache(VkDevice, VkPipelineCache, const VkAllocationCallbacks*);
-    VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineCache(VkDevice, const VkPipelineCacheCreateInfo*, const VkAllocationCallbacks*, VkPipelineCache*);
-    VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(VkDevice, VkPipelineCache, size_t*, void*);
-}
-
 // ---------------------------------------------------------
 // MALI-G68 ASYNC PIPELINE OPTIMIZER
 // ---------------------------------------------------------
