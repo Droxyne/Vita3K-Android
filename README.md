@@ -42,7 +42,7 @@ The emulator currently runs most homebrew programs. It is also able to load some
 
 ## License
 
-Vita3K is licensed under the **GPLv2** license. This is largely dictated by external dependencies, most notably Unicorn.
+Vita3K is licensed under the **GPLv2** license. This is largely dictated by external dependencies, most notably Unicorn
 
 ## Downloads
 * Windows
