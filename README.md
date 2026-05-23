@@ -61,7 +61,7 @@ Vita3K is licensed under the **GPLv2** license. This is largely dictated by exte
 
 ## Building
 
-Please see [`building.md`](./building.md).
+Please see [`building.md`](./building.md)
 
 ## Running
 Look through the app list and click on the app you would like to run and click the start button.
