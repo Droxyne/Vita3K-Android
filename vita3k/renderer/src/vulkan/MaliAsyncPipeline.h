@@ -1,5 +1,5 @@
 #pragma once
-
+#undef VK_NO_PROTOTYPES
 #include <vulkan/vulkan.h>
 #include <thread>
 #include <mutex>
