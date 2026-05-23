@@ -3,7 +3,6 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <stdexcept>
-#include <vulkan/vulkan.h>   // ensure VK headers are included
 
 class MaliTBDROptimizer {
 public:
