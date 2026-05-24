@@ -228,18 +228,7 @@ void PipelineCache::init(bool support_rasterized_order_access) {
     support_coherent_framebuffer_fetch = support_rasterized_order_access;
 
     const int nb_logical_threads = SDL_GetCPUCount();
-#ifdef ANDROID
-if (nb_logical_threads > 12)
-    nb_worker_threads = 5;
-else if (nb_logical_threads > 8)
-    nb_worker_threads = 4;
-else if (nb_logical_threads >= 8)
-    nb_worker_threads = 3;
-else if (nb_logical_threads >= 6)
-    nb_worker_threads = 2;
-else
-    nb_worker_threads = 2;
-#else
+// took this from RPCS3 (slightly modified)
 if (nb_logical_threads > 12)
     nb_worker_threads = 6;
 else if (nb_logical_threads > 8)
@@ -250,7 +239,6 @@ else if (nb_logical_threads >= 6)
     nb_worker_threads = 2;
 else
     nb_worker_threads = 1;
-#endif
 
     if (use_async_compilation) {
         // we could not initialize the worker threads previously
