@@ -7,10 +7,11 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <mutex>
 #include <cstdint>
 
 // ---------------------------------------------------------
-// MALI-G68 LOCK-FREE ASYNC PIPELINE OPTIMIZER
+// MALI-G68 LOCK-FREE QUEUE + SPIN-PROTECTED STATUS
 // ---------------------------------------------------------
 class AsyncPipelineManager {
 public:
@@ -25,39 +26,34 @@ public:
         device_ = device;
         cacheFilePath_ = cacheFilePath;
         shutdown_.store(false, std::memory_order_release);
-
-        LoadCache();
-
-        // Spawn background worker
         workerThread_ = std::thread(&AsyncPipelineManager::WorkerLoop, this);
     }
 
     void Shutdown() {
         if (shutdown_.exchange(true, std::memory_order_acq_rel)) return;
-
         if (workerThread_.joinable()) {
             workerThread_.join();
         }
     }
 
-    VkPipelineCache GetCacheHandle() const {
-        return pipelineCache_;
-    }
-
-    // LOCK-FREE: Push task onto the single-producer single-consumer ring buffer
     bool QueuePipeline(uint64_t hash, CompileTask task) {
+        // 1. Ultra-fast state check
+        {
+            std::lock_guard<std::mutex> lock(statusMutex_);
+            auto it = pipelineStatus_.find(hash);
+            if (it != pipelineStatus_.end()) {
+                return false; // Already queued or compiled
+            }
+            // Mark as compiling immediately so we don't queue duplicates
+            pipelineStatus_[hash] = VK_NULL_HANDLE; 
+        }
+
+        // 2. Lock-free ring buffer push
         uint32_t currentTail = tail_.load(std::memory_order_relaxed);
         uint32_t nextTail = (currentTail + 1) & QUEUE_MASK;
 
-        // Check if queue is full
         if (nextTail == head_.load(std::memory_order_acquire)) {
-            return false; 
-        }
-
-        // If the hash is already tracked and valid, don't re-queue
-        auto it = pipelineStatus_.find(hash);
-        if (it != pipelineStatus_.end() && it->second.load(std::memory_order_relaxed) != VK_NULL_HANDLE) {
-            return false;
+            return false; // Queue full
         }
 
         ringBuffer_[currentTail] = {hash, std::move(task)};
@@ -65,17 +61,13 @@ public:
         return true;
     }
 
-    // LOCK-FREE: Main render thread lookups read atomic pointers directly
     VkPipeline GetPipeline(uint64_t hash) {
+        std::lock_guard<std::mutex> lock(statusMutex_);
         auto it = pipelineStatus_.find(hash);
         if (it != pipelineStatus_.end()) {
-            return it->second.load(std::memory_order_acquire);
+            return it->second;
         }
         return VK_NULL_HANDLE;
-    }
-
-    void SaveCache() {
-        // stub - pipeline cache persistence handled by Vita3K core
     }
 
 private:
@@ -88,13 +80,11 @@ private:
     };
 
     VkDevice device_ = VK_NULL_HANDLE;
-    VkPipelineCache pipelineCache_ = VK_NULL_HANDLE;
     std::string cacheFilePath_;
-
     std::thread workerThread_;
     std::atomic<bool> shutdown_{true};
 
-    // --- LOCK-FREE SPSC RING BUFFER CONFIG ---
+    // --- LOCK-FREE SPSC RING BUFFER ---
     static constexpr uint32_t QUEUE_SIZE = 1024; // Must be a power of 2
     static constexpr uint32_t QUEUE_MASK = QUEUE_SIZE - 1;
     
@@ -102,39 +92,30 @@ private:
     std::atomic<uint32_t> head_{0};
     std::atomic<uint32_t> tail_{0};
 
-    // Maps pipeline hash to an atomic VkPipeline handle to prevent data races
-    std::unordered_map<uint64_t, std::atomic<VkPipeline>> pipelineStatus_;
-    uint32_t pipelinesCompiledSinceLastSave_ = 0;
-
-    void LoadCache() {
-        pipelineCache_ = VK_NULL_HANDLE;
-    }
+    // --- PROTECTED STATUS MAP ---
+    std::mutex statusMutex_;
+    std::unordered_map<uint64_t, VkPipeline> pipelineStatus_;
 
     void WorkerLoop() {
         while (!shutdown_.load(std::memory_order_acquire)) {
             uint32_t currentHead = head_.load(std::memory_order_relaxed);
             
             if (currentHead == tail_.load(std::memory_order_acquire)) {
-                // Low latency spin-yield instead of hitting heavy OS sleep states via cv
                 std::this_thread::yield(); 
                 continue;
             }
 
-            // Pop from buffer
+            // Pop task lock-free
             TaskWrapper currentTask = std::move(ringBuffer_[currentHead]);
             head_.store((currentHead + 1) & QUEUE_MASK, std::memory_order_release);
 
-            // Let the Mali GPU driver run heavy compilation in the background
+            // Execute heavy Mali compilation OUTSIDE the mutex lock
             VkPipeline compiledPipeline = currentTask.task();
 
             if (compiledPipeline != VK_NULL_HANDLE) {
-                pipelineStatus_[currentTask.hash].store(compiledPipeline, std::memory_order_release);
-
-                pipelinesCompiledSinceLastSave_++;
-                if (pipelinesCompiledSinceLastSave_ >= 10) {
-                    pipelinesCompiledSinceLastSave_ = 0;
-                    SaveCache();
-                }
+                // Lock only for the split second it takes to write the pointer
+                std::lock_guard<std::mutex> lock(statusMutex_);
+                pipelineStatus_[currentTask.hash] = compiledPipeline;
             }
         }
     }
