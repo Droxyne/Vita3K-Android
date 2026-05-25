@@ -782,7 +782,7 @@ static vk::StencilOpState convert_op_state(const GxmStencilStateOp &state) {
 vk::Pipeline PipelineCache::compile_pipeline(SceGxmPrimitiveType type, vk::RenderPass render_pass, const SceGxmVertexProgram &vertex_program_gxm, const SceGxmFragmentProgram &fragment_program_gxm, const GxmRecordState &record, const shader::Hints &hints, MemState &mem) {
     const VertexProgram &vertex_program = *vertex_program_gxm.renderer_data;
     const SceGxmProgram *gxm_fragment_shader = fragment_program_gxm.program.get(mem);
-    const VKFragmentProgram &fragment_program = *reinterpretcast<VKFragmentProgram *>(
+    const VKFragmentProgram &fragment_program = *reinterpret_cast<VKFragmentProgram *>(
         fragment_program_gxm.renderer_data.get());
 
     // the vertex input state must be computed before shader are retrieved in case symbols are stripped
