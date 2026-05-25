@@ -616,12 +616,15 @@ vk::RenderPass PipelineCache::retrieve_render_pass(vk::Format format, bool force
     // Run the Exynos/Mali bandwidth saver
     MaliTBDROptimizer::OptimizeRenderPassAttachments(opt_attachments, is_clear_pass, readbacks);
 
-    // Feed the optimized array back into the Vulkan struct safely
+        // Feed the optimized array back into the Vulkan struct safely
     std::vector<vk::AttachmentDescription> final_vk_attachments;
     for (const auto& a : opt_attachments) {
-        final_vk_attachments.push_back(static_cast<vk::AttachmentDescription>(a));
+        vk::AttachmentDescription vk_a;
+        memcpy(&vk_a, &a, sizeof(VkAttachmentDescription));
+        final_vk_attachments.push_back(vk_a);
     }
     pass_info.setAttachments(final_vk_attachments);
+
 
     render_passes_map[format] = state.device.createRenderPass(pass_info);
 
