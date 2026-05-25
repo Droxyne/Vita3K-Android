@@ -1042,5 +1042,3 @@ vk::ShaderModule PipelineCache::precompile_shader(const Sha256Hash &hash, bool s
     return shader;
 }
 } // namespace renderer::vulkan
-
-}
