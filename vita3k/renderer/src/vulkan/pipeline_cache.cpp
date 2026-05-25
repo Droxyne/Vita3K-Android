@@ -38,6 +38,7 @@
 #include <xxhash.h>
 #undef VK_NO_PROTOTYPES
 #include "MaliTBDROptimizer.h"
+#include "MaliAsyncPipeline.h" // Added our lock-free engine
 
 namespace renderer::vulkan {
 
@@ -228,17 +229,16 @@ void PipelineCache::init(bool support_rasterized_order_access) {
     support_coherent_framebuffer_fetch = support_rasterized_order_access;
 
     const int nb_logical_threads = SDL_GetCPUCount();
-// took this from RPCS3 (slightly modified)
-if (nb_logical_threads > 12)
-    nb_worker_threads = 6;
-else if (nb_logical_threads > 8)
-    nb_worker_threads = 4;
-else if (nb_logical_threads >= 8)
-    nb_worker_threads = 3;
-else if (nb_logical_threads >= 6)
-    nb_worker_threads = 2;
-else
-    nb_worker_threads = 1;
+    if (nb_logical_threads > 12)
+        nb_worker_threads = 6;
+    else if (nb_logical_threads > 8)
+        nb_worker_threads = 4;
+    else if (nb_logical_threads >= 8)
+        nb_worker_threads = 3;
+    else if (nb_logical_threads >= 6)
+        nb_worker_threads = 2;
+    else
+        nb_worker_threads = 1;
 
     if (use_async_compilation) {
         // we could not initialize the worker threads previously
@@ -589,17 +589,39 @@ vk::RenderPass PipelineCache::retrieve_render_pass(vk::Format format, bool force
 
     vk::RenderPassCreateInfo pass_info{};
     vk::AttachmentDescription attachments[] = { color_attachment, ds_attachment };
-    pass_info.setAttachments(attachments);
+    
     pass_info.setSubpasses(subpass);
     pass_info.setDependencies(dependencies);
-    if (no_color) {
-        // only add the ds attachment
-        pass_info.pAttachments = &attachments[1];
-        pass_info.attachmentCount = 1;
-        // no need for the self-dependency
-        pass_info.setDependencyCount(2);
-    }             
 
+    // --- MALI TBDR OPTIMIZER HOOK ---
+    std::vector<VkAttachmentDescription> opt_attachments;
+    std::vector<bool> readbacks;
+
+    if (no_color) {
+        // Only depth/stencil
+        opt_attachments.push_back(static_cast<VkAttachmentDescription>(attachments[1]));
+        readbacks.push_back(force_store); // Guest reads back depth
+        pass_info.setDependencyCount(2);
+    } else {
+        // Color + Depth/Stencil
+        opt_attachments.push_back(static_cast<VkAttachmentDescription>(attachments[0]));
+        opt_attachments.push_back(static_cast<VkAttachmentDescription>(attachments[1]));
+        readbacks.push_back(force_store); // Color readback
+        readbacks.push_back(force_store); // Depth readback
+    }
+
+    // force_load == false means it's a CLEAR pass
+    bool is_clear_pass = !force_load;
+
+    // Run the Exynos/Mali bandwidth saver
+    MaliTBDROptimizer::OptimizeRenderPassAttachments(opt_attachments, is_clear_pass, readbacks);
+
+    // Feed the optimized array back into the Vulkan struct safely
+    std::vector<vk::AttachmentDescription> final_vk_attachments;
+    for (const auto& a : opt_attachments) {
+        final_vk_attachments.push_back(static_cast<vk::AttachmentDescription>(a));
+    }
+    pass_info.setAttachments(final_vk_attachments);
 
     render_passes_map[format] = state.device.createRenderPass(pass_info);
 
@@ -760,7 +782,7 @@ static vk::StencilOpState convert_op_state(const GxmStencilStateOp &state) {
 vk::Pipeline PipelineCache::compile_pipeline(SceGxmPrimitiveType type, vk::RenderPass render_pass, const SceGxmVertexProgram &vertex_program_gxm, const SceGxmFragmentProgram &fragment_program_gxm, const GxmRecordState &record, const shader::Hints &hints, MemState &mem) {
     const VertexProgram &vertex_program = *vertex_program_gxm.renderer_data;
     const SceGxmProgram *gxm_fragment_shader = fragment_program_gxm.program.get(mem);
-    const VKFragmentProgram &fragment_program = *reinterpret_cast<VKFragmentProgram *>(
+    const VKFragmentProgram &fragment_program = *reinterpretcast<VKFragmentProgram *>(
         fragment_program_gxm.renderer_data.get());
 
     // the vertex input state must be computed before shader are retrieved in case symbols are stripped
@@ -921,7 +943,6 @@ vk::Pipeline PipelineCache::retrieve_pipeline(VKContext &context, SceGxmPrimitiv
     const bool compile_pipeline_async = !already_in_cache && consider_for_async && use_async_compilation;
 
     if (compile_pipeline_async) {
-        // create the pipeline compile request
         CompileRequest *request = new CompileRequest;
         *request = {
             .pipeline = &it->second,
@@ -934,11 +955,42 @@ vk::Pipeline PipelineCache::retrieve_pipeline(VKContext &context, SceGxmPrimitiv
         memcpy(request->record_data, &record, record_pipeline_len);
         it->second = pipeline_compiling;
 
-        // we must not delete these programs until the worker is done
         vertex_program_gxm.compile_threads_on.fetch_add(1, std::memory_order_relaxed);
         fragment_program_gxm.compile_threads_on.fetch_add(1, std::memory_order_relaxed);
 
-        pipeline_compile_queue.enqueue(pipeline_compile_queue_token, request);
+        // --- THE LOCK-FREE ENGINE SWAP ---
+        auto compile_task = [this, request, &mem]() -> VkPipeline {
+            vk::Pipeline pipeline = compile_pipeline(
+                request->type, request->render_pass, 
+                *request->vertex_program_gxm, *request->fragment_program_gxm, 
+                *request->get_record(), request->hints, mem
+            );
+
+            // Cleanup threads
+            request->vertex_program_gxm->compile_threads_on.fetch_sub(1, std::memory_order_release);
+            request->fragment_program_gxm->compile_threads_on.fetch_sub(1, std::memory_order_release);
+
+            const auto time_s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            next_pipeline_cache_save = time_s + pipeline_cache_save_delay;
+            state.shaders_count_compiled++;
+
+            delete request;
+            return static_cast<VkPipeline>(pipeline);
+        };
+
+        // Fire it into the ring buffer
+        bool queued = AsyncPipelineManager::GetInstance().QueuePipeline(key, compile_task);
+        
+        if (!queued) {
+            // Failsafe: ring buffer full, fallback to main thread compilation
+            vk::Pipeline fallback = compile_pipeline(type, render_pass, vertex_program_gxm, fragment_program_gxm, record, context.shader_hints, mem);
+            it->second = fallback;
+            
+            vertex_program_gxm.compile_threads_on.fetch_sub(1, std::memory_order_relaxed);
+            fragment_program_gxm.compile_threads_on.fetch_sub(1, std::memory_order_relaxed);
+            delete request;
+            return fallback;
+        }
 
         return nullptr;
     } else {
@@ -990,3 +1042,5 @@ vk::ShaderModule PipelineCache::precompile_shader(const Sha256Hash &hash, bool s
     return shader;
 }
 } // namespace renderer::vulkan
+
+}
