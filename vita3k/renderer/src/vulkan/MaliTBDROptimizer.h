@@ -14,7 +14,6 @@ public:
                format == VK_FORMAT_S8_UINT;
     }
 
-    // FIXED: Upgraded from single boolean to per-attachment tracking array
     static void OptimizeRenderPassAttachments(
         std::vector<VkAttachmentDescription>& attachments,
         bool is_guest_clear_pass,
@@ -28,25 +27,22 @@ public:
             auto& att = attachments[i];
             bool isDepthStencil = IsDepthStencilFormat(att.format);
             bool guestNeedsData = attachments_require_readback[i];
+            bool isPresentAttachment = (att.finalLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
             if (isDepthStencil) {
-                if (!guestNeedsData) {
-                    // Safe to optimize out: keep it entirely inside local GPU tile memory
-                    att.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-                    att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-                } else {
-                    // CRITICAL FIX: Spill to system RAM so the guest can read it back safely
-                    att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-                    att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
-                }
+                // Depth/stencil: always store for now.
+                // Vita games do CPU readbacks on depth constantly (shadow maps etc).
+                // Re-enable DONT_CARE here only after rendering is confirmed stable
+                // and you have measured actual bandwidth savings.
+                att.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+                att.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 
                 if (att.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
                     if (is_guest_clear_pass) {
-                        att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                        att.loadOp        = VK_ATTACHMENT_LOAD_OP_CLEAR;
                         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
                     } else {
-                        // Keep as DONT_CARE if we don't need historical data preserved on load
-                        att.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                        att.loadOp        = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
                         att.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
                     }
                 }
@@ -56,8 +52,9 @@ public:
                     att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
                 }
 
-                // Balance bandwidth on color buffers as well
-                if (!guestNeedsData) {
+                // NEVER discard the final present attachment — that's the actual frame.
+                // Only intermediate color buffers that nothing reads back are safe to discard.
+                if (!guestNeedsData && !isPresentAttachment) {
                     att.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
                 } else {
                     att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
